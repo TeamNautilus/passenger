@@ -8,9 +8,13 @@ namespace :passenger do
       end
       exit
     end
-    on roles(fetch(:passenger_roles)), in: fetch(:passenger_restart_runner), wait: fetch(:passenger_restart_wait), limit: fetch(:passenger_restart_limit) do
+    on roles(fetch(:passenger_roles)), in: fetch(:passenger_restart_runner), wait: fetch(:passenger_restart_wait), limit: fetch(:passenger_restart_limit) do |host|
       with fetch(:passenger_environment_variables) do
         within(fetch(:passenger_in_gemfile, false) ? release_path : "") do
+           within release_path do
+             instance_eval(fetch(:passenger_pre_restart_block))
+          end
+
           if restart_with_touch.nil?
             # 'passenger -v' may output one of the following depending on the version:
             # Phusion Passenger version x.x.x
@@ -31,6 +35,10 @@ namespace :passenger do
               restart_command = [:sudo, SSHKit::Command.new(*restart_command).to_s]
             end
             execute *restart_command
+          end
+
+          within release_path do
+            instance_eval(fetch(:passenger_post_restart_block))
           end
         end
       end
@@ -93,6 +101,8 @@ namespace :load do
     set :passenger_restart_command, 'passenger-config restart-app'
     set :passenger_restart_options, -> { "#{deploy_to} --ignore-app-not-running" }
     set :passenger_rvm_ruby_version, ->{ fetch(:rvm_ruby_version) }
+    set(:passenger_pre_restart_block) {''}
+    set(:passenger_post_restart_block) {''}
     _tasks = Rake.application.tasks.collect(&:to_s)
     if _tasks.include?("bundler:map_bins")
       before :'bundler:map_bins', :'passenger:bundler:hook'
